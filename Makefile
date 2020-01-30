@@ -1,4 +1,4 @@
-CFLAGS = -Wall -Wextra -Werror -O2
+CFLAGS = -Wall -Wextra -Werror -O2 -g
 
 .PHONY: run
 run: kvm-hello-world
@@ -8,7 +8,7 @@ run: kvm-hello-world
 	./kvm-hello-world -l
 
 kvm-hello-world: kvm-hello-world.o payload.o
-	$(CC) $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@
 
 payload.o: payload.ld guest16.o guest32.img.o guest64.img.o
 	$(LD) -T $< -o $@

@@ -9,6 +9,10 @@
 #include <stdint.h>
 #include <linux/kvm.h>
 
+#define viva 1
+#define VMSleep 0
+#define switchcase 1
+#define detail 0
 /* CR0 bits */
 #define CR0_PE 1u
 #define CR0_MP (1U << 1)
@@ -63,91 +67,145 @@
 #define PDE64_PS (1U << 7)
 #define PDE64_G (1U << 8)
 
-
-struct vm {
+struct vm
+{
 	int sys_fd;
 	int fd;
 	char *mem;
 };
 
+/*
+	vm_init(&vm, 0x200000);
+*/
 void vm_init(struct vm *vm, size_t mem_size)
 {
-	int api_ver;
-	struct kvm_userspace_memory_region memreg;
+	if (viva)
+		printf("vm_init %d\n", __LINE__);
 
+	int api_ver;
+	struct kvm_userspace_memory_region userspace_mem_region;
+
+	// Open kvm device file in read/write mode
 	vm->sys_fd = open("/dev/kvm", O_RDWR);
-	if (vm->sys_fd < 0) {
+
+	if (vm->sys_fd < 0)
+	{
 		perror("open /dev/kvm");
 		exit(1);
 	}
 
 	api_ver = ioctl(vm->sys_fd, KVM_GET_API_VERSION, 0);
-	if (api_ver < 0) {
+	if (api_ver < 0)
+	{
 		perror("KVM_GET_API_VERSION");
 		exit(1);
 	}
 
-	if (api_ver != KVM_API_VERSION) {
+	if (api_ver != KVM_API_VERSION)
+	{
 		fprintf(stderr, "Got KVM api version %d, expected %d\n",
-			api_ver, KVM_API_VERSION);
+				api_ver, KVM_API_VERSION);
 		exit(1);
 	}
 
+	// Create a VM and store in vm data struct
 	vm->fd = ioctl(vm->sys_fd, KVM_CREATE_VM, 0);
-	if (vm->fd < 0) {
+	if (vm->fd < 0)
+	{
 		perror("KVM_CREATE_VM");
 		exit(1);
 	}
 
-        if (ioctl(vm->fd, KVM_SET_TSS_ADDR, 0xfffbd000) < 0) {
-                perror("KVM_SET_TSS_ADDR");
+	/*
+		This ioctl defines the physical address of a three-page region in the guest
+		physical address space.  The region must be within the first 4GB of the
+		guest physical address space and must not conflict with any memory slot
+		or any mmio address.  The guest may malfunction if it accesses this memory
+		region.
+	*/
+
+	if (ioctl(vm->fd, KVM_SET_TSS_ADDR, 0xfffbd000) < 0) //3GB
+	{
+		perror("KVM_SET_TSS_ADDR");
 		exit(1);
 	}
 
+	// if (viva)
+	// 	printf("Allocating guest memory of size = %lu pages or %lu MB\n",
+	//mem_size / getpagesize(), mem_size/1024/1024);
+
 	vm->mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE,
-		   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-	if (vm->mem == MAP_FAILED) {
+				   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+
+	if (vm->mem == MAP_FAILED)
+	{
 		perror("mmap mem");
 		exit(1);
 	}
 
+	/* 
+		used to give advice or directions to the kernel about the address 
+		range beginning at address vm->mem and with size mem_size bytes
+	*/
 	madvise(vm->mem, mem_size, MADV_MERGEABLE);
 
-	memreg.slot = 0;
-	memreg.flags = 0;
-	memreg.guest_phys_addr = 0;
-	memreg.memory_size = mem_size;
-	memreg.userspace_addr = (unsigned long)vm->mem;
-        if (ioctl(vm->fd, KVM_SET_USER_MEMORY_REGION, &memreg) < 0) {
+	userspace_mem_region.slot = 0;
+	userspace_mem_region.flags = 0;
+	userspace_mem_region.guest_phys_addr = 0;
+	userspace_mem_region.memory_size = mem_size;
+	userspace_mem_region.userspace_addr = (unsigned long)vm->mem;
+
+	/*
+ps -ax | grep kvm
+pmap -p <pid>
+*/
+	if (viva)
+		printf("Allocating %lu MB of physical memory to guest OS at %lx"
+			   " in virtual address space of host at line: %d\n",
+			   mem_size / 1024 / 1024, (unsigned long)vm->mem, __LINE__ + 1);
+	if (ioctl(vm->fd, KVM_SET_USER_MEMORY_REGION, &userspace_mem_region) < 0)
+	{
 		perror("KVM_SET_USER_MEMORY_REGION");
-                exit(1);
+		exit(1);
 	}
 }
 
-struct vcpu {
+struct vcpu
+{
 	int fd;
 	struct kvm_run *kvm_run;
 };
 
 void vcpu_init(struct vm *vm, struct vcpu *vcpu)
 {
+	if (viva)
+
+		printf("vcpu_init %d\n", __LINE__);
+
 	int vcpu_mmap_size;
 
 	vcpu->fd = ioctl(vm->fd, KVM_CREATE_VCPU, 0);
-        if (vcpu->fd < 0) {
+	if (vcpu->fd < 0)
+	{
 		perror("KVM_CREATE_VCPU");
-                exit(1);
+		exit(1);
 	}
 
 	vcpu_mmap_size = ioctl(vm->sys_fd, KVM_GET_VCPU_MMAP_SIZE, 0);
-        if (vcpu_mmap_size <= 0) {
+	if (vcpu_mmap_size <= 0)
+	{
 		perror("KVM_GET_VCPU_MMAP_SIZE");
-                exit(1);
+		exit(1);
 	}
 
 	vcpu->kvm_run = mmap(NULL, vcpu_mmap_size, PROT_READ | PROT_WRITE,
-			     MAP_SHARED, vcpu->fd, 0);
-	if (vcpu->kvm_run == MAP_FAILED) {
+						 MAP_SHARED, vcpu->fd, 0);
+	if (viva)
+		printf("Mapping %u KB as VCPU runtime memory located at %lx in"
+			   " virtual address space of hypervisor in line: %d\n",
+			   vcpu_mmap_size / 1024, (long int)vcpu->kvm_run, __LINE__ - 5);
+	if (vcpu->kvm_run == MAP_FAILED)
+	{
 		perror("mmap kvm_run");
 		exit(1);
 	}
@@ -155,53 +213,121 @@ void vcpu_init(struct vm *vm, struct vcpu *vcpu)
 
 int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 {
+	if (viva)
+
+		printf("run_vm %d\n", __LINE__);
+
 	struct kvm_regs regs;
 	uint64_t memval = 0;
 
-	for (;;) {
-		if (ioctl(vcpu->fd, KVM_RUN, 0) < 0) {
+	uint32_t exit_count=0;
+	for (;;)
+	{
+		if (viva && detail)
+			printf("Shifting the control to guest OS in line %d\n", __LINE__ + 1);
+		if (ioctl(vcpu->fd, KVM_RUN, 0) < 0)
+		{
 			perror("KVM_RUN");
 			exit(1);
 		}
 
-		switch (vcpu->kvm_run->exit_reason) {
+		if (viva && detail)
+			printf("Shifting the control back to hypervisor in line %d\n", __LINE__ - 7);
+
+		if (viva && switchcase)
+		{
+			printf("Exit reason: %u on port %x ie ", vcpu->kvm_run->exit_reason,vcpu->kvm_run->io.port);
+					exit_count++;
+
+			switch (vcpu->kvm_run->exit_reason)
+			{
+			case 2:
+				printf("KVM_EXIT_IO\n");
+				break;
+
+			case 5:
+				printf("KVM_EXIT_HLT\n");
+				break;
+
+			default:
+				printf("Add more cases in line %d\n", __LINE__);
+				break;
+			}
+		}
+		if (viva && VMSleep)
+			sleep(10000);
+		switch (vcpu->kvm_run->exit_reason)
+		{
+			
 		case KVM_EXIT_HLT:
+			// printf
 			goto check;
 
 		case KVM_EXIT_IO:
-			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT
-			    && vcpu->kvm_run->io.port == 0xE9) {
+			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xE9)
+			{
 				char *p = (char *)vcpu->kvm_run;
 				fwrite(p + vcpu->kvm_run->io.data_offset,
-				       vcpu->kvm_run->io.size, 1, stdout);
+					   vcpu->kvm_run->io.size, 1, stdout);
 				fflush(stdout);
 				continue;
 			}
 
+			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF1)
+			{
+				char *p = (char *)vcpu->kvm_run;
+				printf("printVal() ==> %d\n why 1 less exit?\n",*(p + vcpu->kvm_run->io.data_offset));
+				fflush(stdout);
+				continue;
+			}
+
+			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_IN && vcpu->kvm_run->io.port == 0xF2)
+			{
+				*((char *)vcpu->kvm_run + vcpu->kvm_run->io.data_offset) = exit_count;
+				continue;
+			}
+
+			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF3)
+			{
+				char *p = (char *)vcpu->kvm_run;
+				printf("Address ==> %d\n ",*(p + vcpu->kvm_run->io.data_offset));
+				fflush(stdout);
+				continue;
+			}
+
+
 			/* fall through */
 		default:
-			fprintf(stderr,	"Got exit_reason %d,"
-				" expected KVM_EXIT_HLT (%d)\n",
-				vcpu->kvm_run->exit_reason, KVM_EXIT_HLT);
+			fprintf(stderr, "Got exit_reason %d,"
+							" expected KVM_EXIT_HLT (%d)\n",
+					vcpu->kvm_run->exit_reason, KVM_EXIT_HLT);
 			exit(1);
 		}
 	}
 
- check:
-	if (ioctl(vcpu->fd, KVM_GET_REGS, &regs) < 0) {
+check:
+	if (viva)
+	{
+		printf("42 is only is check proper termination of the guest OS, the guest OS writes 42 in its virtual memory ");
+		printf("at addr 0x400 and also in its regiser rax hence can be modified to any other number\n");
+	}
+	if (ioctl(vcpu->fd, KVM_GET_REGS, &regs) < 0)
+	{
 		perror("KVM_GET_REGS");
 		exit(1);
 	}
 
-	if (regs.rax != 42) {
+	if (regs.rax != 42)
+	{
 		printf("Wrong result: {E,R,}AX is %lld\n", regs.rax);
 		return 0;
 	}
 
 	memcpy(&memval, &vm->mem[0x400], sz);
-	if (memval != 42) {
+	if (memval != 42)
+	{
 		printf("Wrong result: memory at 0x400 is %lld\n",
-		       (unsigned long long)memval);
+			   (unsigned long long)memval);
 		return 0;
 	}
 
@@ -212,12 +338,17 @@ extern const unsigned char guest16[], guest16_end[];
 
 int run_real_mode(struct vm *vm, struct vcpu *vcpu)
 {
+	if (viva)
+
+		printf("run_real_mode %d\n", __LINE__);
+
 	struct kvm_sregs sregs;
 	struct kvm_regs regs;
 
 	printf("Testing real mode\n");
 
-        if (ioctl(vcpu->fd, KVM_GET_SREGS, &sregs) < 0) {
+	if (ioctl(vcpu->fd, KVM_GET_SREGS, &sregs) < 0)
+	{
 		perror("KVM_GET_SREGS");
 		exit(1);
 	}
@@ -225,7 +356,8 @@ int run_real_mode(struct vm *vm, struct vcpu *vcpu)
 	sregs.cs.selector = 0;
 	sregs.cs.base = 0;
 
-        if (ioctl(vcpu->fd, KVM_SET_SREGS, &sregs) < 0) {
+	if (ioctl(vcpu->fd, KVM_SET_SREGS, &sregs) < 0)
+	{
 		perror("KVM_SET_SREGS");
 		exit(1);
 	}
@@ -235,17 +367,22 @@ int run_real_mode(struct vm *vm, struct vcpu *vcpu)
 	regs.rflags = 2;
 	regs.rip = 0;
 
-	if (ioctl(vcpu->fd, KVM_SET_REGS, &regs) < 0) {
+	if (ioctl(vcpu->fd, KVM_SET_REGS, &regs) < 0)
+	{
 		perror("KVM_SET_REGS");
 		exit(1);
 	}
 
-	memcpy(vm->mem, guest16, guest16_end-guest16);
+	memcpy(vm->mem, guest16, guest16_end - guest16);
 	return run_vm(vm, vcpu, 2);
 }
 
 static void setup_protected_mode(struct kvm_sregs *sregs)
 {
+	if (viva)
+
+		printf("setup_protected_mode %d\n", __LINE__);
+
 	struct kvm_segment seg = {
 		.base = 0,
 		.limit = 0xffffffff,
@@ -272,19 +409,25 @@ extern const unsigned char guest32[], guest32_end[];
 
 int run_protected_mode(struct vm *vm, struct vcpu *vcpu)
 {
+	if (viva)
+
+		printf("run_protected_mode %d\n", __LINE__);
+
 	struct kvm_sregs sregs;
 	struct kvm_regs regs;
 
 	printf("Testing protected mode\n");
 
-        if (ioctl(vcpu->fd, KVM_GET_SREGS, &sregs) < 0) {
+	if (ioctl(vcpu->fd, KVM_GET_SREGS, &sregs) < 0)
+	{
 		perror("KVM_GET_SREGS");
 		exit(1);
 	}
 
 	setup_protected_mode(&sregs);
 
-        if (ioctl(vcpu->fd, KVM_SET_SREGS, &sregs) < 0) {
+	if (ioctl(vcpu->fd, KVM_SET_SREGS, &sregs) < 0)
+	{
 		perror("KVM_SET_SREGS");
 		exit(1);
 	}
@@ -294,17 +437,22 @@ int run_protected_mode(struct vm *vm, struct vcpu *vcpu)
 	regs.rflags = 2;
 	regs.rip = 0;
 
-	if (ioctl(vcpu->fd, KVM_SET_REGS, &regs) < 0) {
+	if (ioctl(vcpu->fd, KVM_SET_REGS, &regs) < 0)
+	{
 		perror("KVM_SET_REGS");
 		exit(1);
 	}
 
-	memcpy(vm->mem, guest32, guest32_end-guest32);
+	memcpy(vm->mem, guest32, guest32_end - guest32);
 	return run_vm(vm, vcpu, 4);
 }
 
 static void setup_paged_32bit_mode(struct vm *vm, struct kvm_sregs *sregs)
 {
+	if (viva)
+
+		printf("setup_paged_32bit_mode %d\n", __LINE__);
+
 	uint32_t pd_addr = 0x2000;
 	uint32_t *pd = (void *)(vm->mem + pd_addr);
 
@@ -314,19 +462,23 @@ static void setup_paged_32bit_mode(struct vm *vm, struct kvm_sregs *sregs)
 
 	sregs->cr3 = pd_addr;
 	sregs->cr4 = CR4_PSE;
-	sregs->cr0
-		= CR0_PE | CR0_MP | CR0_ET | CR0_NE | CR0_WP | CR0_AM | CR0_PG;
+	sregs->cr0 = CR0_PE | CR0_MP | CR0_ET | CR0_NE | CR0_WP | CR0_AM | CR0_PG;
 	sregs->efer = 0;
 }
 
 int run_paged_32bit_mode(struct vm *vm, struct vcpu *vcpu)
 {
+	if (viva)
+
+		printf("run_paged_32bit_mode %d\n", __LINE__);
+
 	struct kvm_sregs sregs;
 	struct kvm_regs regs;
 
 	printf("Testing 32-bit paging\n");
 
-        if (ioctl(vcpu->fd, KVM_GET_SREGS, &sregs) < 0) {
+	if (ioctl(vcpu->fd, KVM_GET_SREGS, &sregs) < 0)
+	{
 		perror("KVM_GET_SREGS");
 		exit(1);
 	}
@@ -334,7 +486,8 @@ int run_paged_32bit_mode(struct vm *vm, struct vcpu *vcpu)
 	setup_protected_mode(&sregs);
 	setup_paged_32bit_mode(vm, &sregs);
 
-        if (ioctl(vcpu->fd, KVM_SET_SREGS, &sregs) < 0) {
+	if (ioctl(vcpu->fd, KVM_SET_SREGS, &sregs) < 0)
+	{
 		perror("KVM_SET_SREGS");
 		exit(1);
 	}
@@ -344,12 +497,13 @@ int run_paged_32bit_mode(struct vm *vm, struct vcpu *vcpu)
 	regs.rflags = 2;
 	regs.rip = 0;
 
-	if (ioctl(vcpu->fd, KVM_SET_REGS, &regs) < 0) {
+	if (ioctl(vcpu->fd, KVM_SET_REGS, &regs) < 0)
+	{
 		perror("KVM_SET_REGS");
 		exit(1);
 	}
 
-	memcpy(vm->mem, guest32, guest32_end-guest32);
+	memcpy(vm->mem, guest32, guest32_end - guest32);
 	return run_vm(vm, vcpu, 4);
 }
 
@@ -357,6 +511,10 @@ extern const unsigned char guest64[], guest64_end[];
 
 static void setup_64bit_code_segment(struct kvm_sregs *sregs)
 {
+	if (viva)
+
+		printf("setup_64bit_code_segment %d\n", __LINE__);
+
 	struct kvm_segment seg = {
 		.base = 0,
 		.limit = 0xffffffff,
@@ -370,7 +528,14 @@ static void setup_64bit_code_segment(struct kvm_sregs *sregs)
 		.g = 1, /* 4KB granularity */
 	};
 
+	if (viva)
+		printf("Setting code section to %llu with limit %x line:%d\n",
+			   seg.base, seg.limit, __LINE__);
 	sregs->cs = seg;
+
+	//testing
+	// sregs->cs.base=7;
+	// printf("test %lld",sregs->cs.);
 
 	seg.type = 3; /* Data: read/write, accessed */
 	seg.selector = 2 << 3;
@@ -379,13 +544,26 @@ static void setup_64bit_code_segment(struct kvm_sregs *sregs)
 
 static void setup_long_mode(struct vm *vm, struct kvm_sregs *sregs)
 {
+	if (viva)
+
+		printf("setup_long_mode %d\n", __LINE__);
+
+	// printf("printing registers\n");
+	// printf("%d",sregs->cs);
+
 	uint64_t pml4_addr = 0x2000;
+	if (viva)
+		printf("Setting page map level 4 at %llx ie at %lx virtual address of guest OS\n", (long long int)(vm->mem + pml4_addr), pml4_addr);
 	uint64_t *pml4 = (void *)(vm->mem + pml4_addr);
 
 	uint64_t pdpt_addr = 0x3000;
+	if (viva)
+		printf("Setting page directory pointer at %llx ie at %lx virtual address of guest OS\n", (long long int)(vm->mem + pdpt_addr), pdpt_addr);
 	uint64_t *pdpt = (void *)(vm->mem + pdpt_addr);
 
 	uint64_t pd_addr = 0x4000;
+	if (viva)
+		printf("Setting page table at %llx ie at %lx virtual address of guest OS\n", (long long int)(vm->mem + pd_addr), pd_addr);
 	uint64_t *pd = (void *)(vm->mem + pd_addr);
 
 	pml4[0] = PDE64_PRESENT | PDE64_RW | PDE64_USER | pdpt_addr;
@@ -394,8 +572,7 @@ static void setup_long_mode(struct vm *vm, struct kvm_sregs *sregs)
 
 	sregs->cr3 = pml4_addr;
 	sregs->cr4 = CR4_PAE;
-	sregs->cr0
-		= CR0_PE | CR0_MP | CR0_ET | CR0_NE | CR0_WP | CR0_AM | CR0_PG;
+	sregs->cr0 = CR0_PE | CR0_MP | CR0_ET | CR0_NE | CR0_WP | CR0_AM | CR0_PG;
 	sregs->efer = EFER_LME | EFER_LMA;
 
 	setup_64bit_code_segment(sregs);
@@ -403,45 +580,68 @@ static void setup_long_mode(struct vm *vm, struct kvm_sregs *sregs)
 
 int run_long_mode(struct vm *vm, struct vcpu *vcpu)
 {
+	if (viva)
+
+		printf("run_long_mode %d\n", __LINE__);
 	struct kvm_sregs sregs;
 	struct kvm_regs regs;
 
 	printf("Testing 64-bit mode\n");
 
-        if (ioctl(vcpu->fd, KVM_GET_SREGS, &sregs) < 0) {
+	if (ioctl(vcpu->fd, KVM_GET_SREGS, &sregs) < 0)
+	{
 		perror("KVM_GET_SREGS");
 		exit(1);
 	}
 
 	setup_long_mode(vm, &sregs);
 
-        if (ioctl(vcpu->fd, KVM_SET_SREGS, &sregs) < 0) {
+	if (ioctl(vcpu->fd, KVM_SET_SREGS, &sregs) < 0)
+	{
 		perror("KVM_SET_SREGS");
 		exit(1);
 	}
 
+	if (viva)
+		printf("Resetting VCPU registers in line number %d\n", __LINE__ + 1);
 	memset(&regs, 0, sizeof(regs));
 	/* Clear all FLAGS bits, except bit 1 which is always set. */
 	regs.rflags = 2;
 	regs.rip = 0;
+	if (viva)
+		printf("Guest starts executing from guest virtual address %llx configured in line %d\n",
+			   regs.rip, __LINE__ - 3);
 	/* Create stack at top of 2 MB page and grow down. */
+
 	regs.rsp = 2 << 20;
 
-	if (ioctl(vcpu->fd, KVM_SET_REGS, &regs) < 0) {
+	if (viva)
+	{
+		printf("setting stack pointer to the end of the first page (ie at 2MB) of guest memeory and at %lx in hypervisor in line %d\n", (long int)(vm->mem + (2 << 20)), __LINE__ - 3);
+		printf("This is the end of the physical memory of guest os and hence stack grows in the opposite direction\n");
+	}
+	if (ioctl(vcpu->fd, KVM_SET_REGS, &regs) < 0)
+	{
 		perror("KVM_SET_REGS");
 		exit(1);
 	}
 
-	memcpy(vm->mem, guest64, guest64_end-guest64);
+	if (viva)
+		printf("copying guest code of size %ld to address %lx in hypervisor and 0 in guest os\n", guest64_end - guest64, (long int)vm->mem);
+	memcpy(vm->mem, guest64, guest64_end - guest64);
 	return run_vm(vm, vcpu, 8);
 }
 
-
 int main(int argc, char **argv)
 {
+	if (viva)
+
+		printf("main %d\n", __LINE__);
+
 	struct vm vm;
 	struct vcpu vcpu;
-	enum {
+	enum
+	{
 		REAL_MODE,
 		PROTECTED_MODE,
 		PAGED_32BIT_MODE,
@@ -449,8 +649,10 @@ int main(int argc, char **argv)
 	} mode = REAL_MODE;
 	int opt;
 
-	while ((opt = getopt(argc, argv, "rspl")) != -1) {
-		switch (opt) {
+	while ((opt = getopt(argc, argv, "rspl")) != -1)
+	{
+		switch (opt)
+		{
 		case 'r':
 			mode = REAL_MODE;
 			break;
@@ -469,15 +671,18 @@ int main(int argc, char **argv)
 
 		default:
 			fprintf(stderr, "Usage: %s [ -r | -s | -p | -l ]\n",
-				argv[0]);
+					argv[0]);
 			return 1;
 		}
 	}
 
+	// printf("initiating vm with memory %d Mbytes\n",0x200000/1024/1024*getpagesize()/1024);
+
 	vm_init(&vm, 0x200000);
 	vcpu_init(&vm, &vcpu);
 
-	switch (mode) {
+	switch (mode)
+	{
 	case REAL_MODE:
 		return !run_real_mode(&vm, &vcpu);
 
