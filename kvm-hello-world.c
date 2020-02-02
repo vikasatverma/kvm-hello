@@ -130,10 +130,6 @@ void vm_init(struct vm *vm, size_t mem_size)
 		exit(1);
 	}
 
-	// if (viva)
-	// 	printf("Allocating guest memory of size = %lu pages or %lu MB\n",
-	//mem_size / getpagesize(), mem_size/1024/1024);
-
 	vm->mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE,
 				   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
 
@@ -219,10 +215,11 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 
 	struct kvm_regs regs;
 	uint64_t memval = 0;
-
-	uint32_t exit_count=0;
-	for (;;)
+// Starting from 1 to account for the exit happened to print the value as the value received 
+// after fetching will have become old.
+	for (uint32_t exit_count = 1;;)
 	{
+
 		if (viva && detail)
 			printf("Shifting the control to guest OS in line %d\n", __LINE__ + 1);
 		if (ioctl(vcpu->fd, KVM_RUN, 0) < 0)
@@ -230,14 +227,13 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 			perror("KVM_RUN");
 			exit(1);
 		}
-
+		exit_count++;
 		if (viva && detail)
 			printf("Shifting the control back to hypervisor in line %d\n", __LINE__ - 7);
 
 		if (viva && switchcase)
 		{
-			printf("Exit reason: %u on port %x ie ", vcpu->kvm_run->exit_reason,vcpu->kvm_run->io.port);
-					exit_count++;
+			printf("Exit reason: %u on port %x ie ", vcpu->kvm_run->exit_reason, vcpu->kvm_run->io.port);
 
 			switch (vcpu->kvm_run->exit_reason)
 			{
@@ -258,7 +254,7 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 			sleep(10000);
 		switch (vcpu->kvm_run->exit_reason)
 		{
-			
+
 		case KVM_EXIT_HLT:
 			// printf
 			goto check;
@@ -276,13 +272,15 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF1)
 			{
 				char *p = (char *)vcpu->kvm_run;
-				printf("printVal() ==> %d\n why 1 less exit?\n",*(p + vcpu->kvm_run->io.data_offset));
+				printf("printVal() ==> %d\n\n", *(p + vcpu->kvm_run->io.data_offset));
 				fflush(stdout);
 				continue;
 			}
 
 			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_IN && vcpu->kvm_run->io.port == 0xF2)
 			{
+				printf("Exited for getNumExists()\n\n");
+				fflush(stdout);
 				*((char *)vcpu->kvm_run + vcpu->kvm_run->io.data_offset) = exit_count;
 				continue;
 			}
@@ -290,25 +288,27 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF3)
 			{
 				char *p = (char *)vcpu->kvm_run;
-				printf("Address ==> %d\n ",*(p + vcpu->kvm_run->io.data_offset));
+				int virtual_address_of_guest = *(p + vcpu->kvm_run->io.data_offset);
+				printf("Display() ==> %s\n\n", vm->mem + virtual_address_of_guest);
 				fflush(stdout);
 				continue;
 			}
-
-
+	
 			/* fall through */
 		default:
 			fprintf(stderr, "Got exit_reason %d,"
 							" expected KVM_EXIT_HLT (%d)\n",
 					vcpu->kvm_run->exit_reason, KVM_EXIT_HLT);
 			exit(1);
+		
 		}
+
 	}
 
 check:
 	if (viva)
 	{
-		printf("42 is only is check proper termination of the guest OS, the guest OS writes 42 in its virtual memory ");
+		printf("42 is only to check proper termination of the guest OS, the guest OS writes 42 in its virtual memory ");
 		printf("at addr 0x400 and also in its regiser rax hence can be modified to any other number\n");
 	}
 	if (ioctl(vcpu->fd, KVM_GET_REGS, &regs) < 0)
@@ -332,6 +332,7 @@ check:
 	}
 
 	return 1;
+
 }
 
 extern const unsigned char guest16[], guest16_end[];
@@ -617,7 +618,7 @@ int run_long_mode(struct vm *vm, struct vcpu *vcpu)
 
 	if (viva)
 	{
-		printf("setting stack pointer to the end of the first page (ie at 2MB) of guest memeory and at %lx in hypervisor in line %d\n", (long int)(vm->mem + (2 << 20)), __LINE__ - 3);
+		printf("setting stack pointer to the end of the first page (ie at 2MB) at %x of guest memeory and at %lx in hypervisor in line %d\n", 2 << 20, (long int)(vm->mem + (2 << 20)), __LINE__ - 3);
 		printf("This is the end of the physical memory of guest os and hence stack grows in the opposite direction\n");
 	}
 	if (ioctl(vcpu->fd, KVM_SET_REGS, &regs) < 0)
