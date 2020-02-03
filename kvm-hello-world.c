@@ -287,9 +287,12 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 
 			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF3)
 			{
+				printf("Have come to display\n");
+
 				char *p = (char *)vcpu->kvm_run;
 				int virtual_address_of_guest = *(p + vcpu->kvm_run->io.data_offset);
 				printf("Display() ==> %s\n\n", vm->mem + virtual_address_of_guest);
+				// fflush(0xF3);
 				fflush(stdout);
 				continue;
 			}

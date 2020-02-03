@@ -33,8 +33,15 @@ static uint32_t getNumExits()
 
 static void display(const char *str)
 {
-	uint32_t x = (intptr_t)str;
-	outb(0xF3, x);
+	uint32_t stringPtr = (intptr_t)str;
+	outb(0xF3, stringPtr);
+}
+
+static void fopen(const char *filename, const char *mode){
+	// uint32_t ptr = (intptr_t)filename;
+	display(mode);
+	display(filename);
+	// display("abc");
 }
 
 void
@@ -61,6 +68,10 @@ void
 
 	numExits = getNumExits();
 	printVal(numExits);
+
+	fopen("filename","w");
+
+
 
 	*(long *)0x400 = 42;
 
