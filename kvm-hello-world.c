@@ -131,7 +131,7 @@ void vm_init(struct vm *vm, size_t mem_size)
 	}
 
 	vm->mem = mmap(NULL, mem_size, PROT_READ | PROT_WRITE,
-				   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+				   MAP_PRIVATE | MAP_ANONYMOUS , -1, 0);
 
 	if (vm->mem == MAP_FAILED)
 	{
@@ -287,12 +287,11 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 
 			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF3)
 			{
-				printf("Have come to display\n");
-
-				char *p = (char *)vcpu->kvm_run;
-				int virtual_address_of_guest = *(p + vcpu->kvm_run->io.data_offset);
-				printf("Display() ==> %s\n\n", vm->mem + virtual_address_of_guest);
-				// fflush(0xF3);
+				uint32_t* p = (*(uint32_t*)((uint8_t*)vcpu->kvm_run + vcpu->kvm_run->io.data_offset));
+				// printf("%lld\n",regs.rcx);
+				// uint64_t virtual_address_of_guest = *(p + vcpu->kvm_run->io.data_offset);
+				uint8_t* q= (uint8_t*) vm->mem + (uint64_t) p;
+				printf("Display() ==> %s\n\n", q);
 				fflush(stdout);
 				continue;
 			}
@@ -610,14 +609,14 @@ int run_long_mode(struct vm *vm, struct vcpu *vcpu)
 		printf("Resetting VCPU registers in line number %d\n", __LINE__ + 1);
 	memset(&regs, 0, sizeof(regs));
 	/* Clear all FLAGS bits, except bit 1 which is always set. */
-	regs.rflags = 2;
+	regs.rflags = 0x2;
 	regs.rip = 0;
 	if (viva)
 		printf("Guest starts executing from guest virtual address %llx configured in line %d\n",
 			   regs.rip, __LINE__ - 3);
 	/* Create stack at top of 2 MB page and grow down. */
 
-	regs.rsp = 2 << 20;
+	regs.rsp = 0x200000;
 
 	if (viva)
 	{
@@ -682,7 +681,7 @@ int main(int argc, char **argv)
 
 	// printf("initiating vm with memory %d Mbytes\n",0x200000/1024/1024*getpagesize()/1024);
 
-	vm_init(&vm, 0x200000);
+	vm_init(&vm, 0x40000000);
 	vcpu_init(&vm, &vcpu);
 
 	switch (mode)

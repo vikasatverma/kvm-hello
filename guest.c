@@ -1,6 +1,23 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// int hypercall(uint16_t port, uint32_t data) {
+//   int ret = 0;
+//   asm(
+//     "mov dx, %[port];"
+//     "mov eax, %[data];"
+//     "out dx, eax;"
+//     "in eax, dx;"
+//     "mov %[ret], eax;"
+//     : [ret] "=r"(ret)
+//     : [port] "r"(port), [data] "r"(data)
+//     : "rax", "rdx"
+//     );
+//   return ret;
+// }
+
+
+
 static void outb(uint16_t port, uint8_t value)
 {
 	asm("outb %0,%1"
@@ -39,8 +56,14 @@ static void display(const char *str)
 
 static void fopen(const char *filename, const char *mode){
 	// uint32_t ptr = (intptr_t)filename;
-	display(mode);
-	display(filename);
+	// display(mode);
+	// display(filename);
+	const char *string="asdfsfasfa";
+
+	outb(0xF3,(intptr_t)string);
+	outb(0xF3,(intptr_t)filename);
+	outb(0xF3,(intptr_t)mode);
+
 	// display("abc");
 }
 
@@ -49,6 +72,10 @@ void
 	__attribute__((section(".start")))
 	_start(void)
 {
+
+
+	fopen("filename","w");
+
 	const char *p;
 
 	for (p = "Hello, world!\n"; *p; ++p)
