@@ -74,9 +74,20 @@ struct vm
 	char *mem;
 };
 
+// struct ftype
+// {
+// 	int fd;
+// 	char *filename;
+// 	char *mode;
+// 	int state;
+// };
 /*
 	vm_init(&vm, 0x200000);
 */
+
+
+int curIndex=0;
+FILE *FILEarray[50]={};
 void vm_init(struct vm *vm, size_t mem_size)
 {
 	if (viva)
@@ -207,6 +218,7 @@ void vcpu_init(struct vm *vm, struct vcpu *vcpu)
 	}
 }
 
+
 int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 {
 	if (viva)
@@ -287,15 +299,147 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 
 			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF3)
 			{
-				uint32_t* p = (*(uint32_t*)((uint8_t*)vcpu->kvm_run + vcpu->kvm_run->io.data_offset));
-				// printf("%lld\n",regs.rcx);
-				// uint64_t virtual_address_of_guest = *(p + vcpu->kvm_run->io.data_offset);
-				uint8_t* q= (uint8_t*) vm->mem + (uint64_t) p;
-				printf("Display() ==> %s\n\n", q);
+				uint32_t* virtualAddressInVM = (uint32_t*)(intptr_t)(*(uint32_t*)((uint8_t*)vcpu->kvm_run + vcpu->kvm_run->io.data_offset));
+				uint8_t* virtualAddressInHost= (uint8_t*) vm->mem + (uint64_t) virtualAddressInVM;
+				printf("Display() ==> %hhn\n\n", virtualAddressInHost);
 				fflush(stdout);
 				continue;
 			}
-	
+	 
+	//fopen function
+			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF4)
+			{
+				uint32_t* virtualAddressInVM = (uint32_t*)(intptr_t)(*(uint32_t*)((uint8_t*)vcpu->kvm_run + vcpu->kvm_run->io.data_offset));
+				uint8_t* virtualAddressInHost= (uint8_t*) vm->mem + (uint64_t) virtualAddressInVM;
+				// printf("F4 %s\n\n", virtualAddressInHost);
+
+				char *filename = (char *)virtualAddressInHost;
+				printf("filename: %s\n",filename);
+				if (ioctl(vcpu->fd, KVM_RUN, 0) < 0)
+				{
+					perror("KVM_RUN");
+					exit(1);
+				}
+				virtualAddressInVM = (uint32_t*)(intptr_t)(*(uint32_t*)((uint8_t*)vcpu->kvm_run + vcpu->kvm_run->io.data_offset));
+				virtualAddressInHost= (uint8_t*) vm->mem + (uint64_t) virtualAddressInVM;
+				// printf("F4 %s\n\n", virtualAddressInHost);
+
+
+				char *mode = (char *)virtualAddressInHost;
+				printf("mode: %s\n",mode);
+				
+				
+				printf("curindex before: %d\n",curIndex);
+
+				FILE *fd = fopen(filename,mode);
+				// printf("fileno = %d\n",fileno(fd));
+				FILEarray[curIndex]=fd;
+				printf("entering: %d\n",curIndex);
+				*((char *)vcpu->kvm_run + vcpu->kvm_run->io.data_offset) = curIndex;
+				// *(uint32_t*)((uint8_t*)vcpu->kvm_run + vcpu->kvm_run->io.data_offset) =curIndex;
+				vm->mem[0x400] = curIndex;
+
+				curIndex++;
+				printf("curindex after: %d\n",curIndex);
+
+				if (ioctl(vcpu->fd, KVM_RUN, 0) < 0)
+				{
+					perror("KVM_RUN");
+					exit(1);
+				}
+
+				fflush(stdout);
+				continue;
+			}
+
+
+		if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF5)
+			{
+				uint32_t* virtualAddressInVM = (uint32_t*)(intptr_t)(*(uint32_t*)((uint8_t*)vcpu->kvm_run + vcpu->kvm_run->io.data_offset));
+				uint8_t* virtualAddressInHost= (uint8_t*) vm->mem + (uint64_t) virtualAddressInVM;
+				// printf("F4 %s\n\n", virtualAddressInHost);
+
+				char *content = (char *)virtualAddressInHost;
+				char data[strlen(content)];
+				unsigned int i;
+				for(i=0;i<strlen(content);i++){
+					data[i]=content[i];
+
+				}
+				data[i]='\0';
+				printf("content: %s\n %s\n",content,data);
+
+				if (ioctl(vcpu->fd, KVM_RUN, 0) < 0)
+				{
+					perror("KVM_RUN");
+					exit(1);
+				}
+
+				char *p = (char *)vcpu->kvm_run;
+				int index=*(p + vcpu->kvm_run->io.data_offset);
+
+
+				FILE *fd=FILEarray[index];
+				printf("Index ==> %d\n fileno = %d\n", index,fileno(fd));
+
+				// fprintf(fd,"%s",content);
+				fwrite(data,1,sizeof(data),fd);
+
+				fflush(stdout);
+				continue;
+
+			}
+
+
+
+
+
+
+//Read
+
+		if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF6)
+			{
+
+				char *p = (char *)vcpu->kvm_run;
+				int size=*(p + vcpu->kvm_run->io.data_offset);
+
+				printf("\nsize ==> %d\n", *(p + vcpu->kvm_run->io.data_offset));
+
+				if (ioctl(vcpu->fd, KVM_RUN, 0) < 0)
+				{
+					perror("KVM_RUN");
+					exit(1);
+				}
+
+				p = (char *)vcpu->kvm_run;
+				int index=*(p + vcpu->kvm_run->io.data_offset);
+
+				FILE *fd=FILEarray[index];
+				printf("Index ==> %d\n fileno = %d\n", index,fileno(fd));
+
+				char data[500]="";
+
+				int sizeofdata = fread(data,1,size,fd);
+				printf("data: %s\nsize of data: %d\n",data,sizeofdata);
+				vm->mem[0x400]=&data;
+
+				fflush(stdout);
+				continue;
+
+			}
+
+
+
+
+
+
+
+
+
+
+
+
+
 			/* fall through */
 		default:
 			fprintf(stderr, "Got exit_reason %d,"

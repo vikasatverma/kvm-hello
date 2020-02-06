@@ -1,20 +1,13 @@
 #include <stddef.h>
 #include <stdint.h>
-
-// int hypercall(uint16_t port, uint32_t data) {
-//   int ret = 0;
-//   asm(
-//     "mov dx, %[port];"
-//     "mov eax, %[data];"
-//     "out dx, eax;"
-//     "in eax, dx;"
-//     "mov %[ret], eax;"
-//     : [ret] "=r"(ret)
-//     : [port] "r"(port), [data] "r"(data)
-//     : "rax", "rdx"
-//     );
-//   return ret;
-// }
+#include <string.h>
+struct file
+{
+	int fd;
+	char *filename;
+	char *mode;
+	int state;
+};
 
 
 
@@ -36,6 +29,7 @@ static inline uint32_t inb(uint16_t port)
 	return ret;
 }
 
+
 static void printVal(uint32_t val)
 {
 	outb(0xF1, val);
@@ -54,17 +48,31 @@ static void display(const char *str)
 	outb(0xF3, stringPtr);
 }
 
-static void fopen(const char *filename, const char *mode){
-	// uint32_t ptr = (intptr_t)filename;
-	// display(mode);
-	// display(filename);
-	const char *string="asdfsfasfa";
 
-	outb(0xF3,(intptr_t)string);
-	outb(0xF3,(intptr_t)filename);
-	outb(0xF3,(intptr_t)mode);
+static uint32_t fopen(char *filename, char* mode){
+		outb(0xF4,(intptr_t)filename);
+		outb(0xF4,(intptr_t)mode);
+		uint32_t fd ;
+		fd = *(long *)0x400;
+		outb(0xF1,fd);
+		return fd;
+		
+}
 
-	// display("abc");
+static void fwrite(char *data, uint32_t fd){
+		outb(0xF5,(intptr_t)data);
+		outb(0xF5,fd);
+
+}
+
+
+
+static char* fread(char *ptr, uint32_t size, uint32_t fd)
+{
+	outb(0xF6,size);
+	outb(0xF6,fd);
+	ptr = (char *)(intptr_t)inb(0xF6);
+	return ptr;
 }
 
 void
@@ -74,8 +82,27 @@ void
 {
 
 
-	fopen("filename","w");
+	char *filename="writefile.txt";
+	char *mode="w";
+	uint32_t fd=0;
+	fd=fopen(filename,mode);
+	char *filecontent="this is some content to be sent to the file with fd 0";
+	fwrite(filecontent,fd);
+	filename = "asdfasfsafda";
+	mode="w";
+	uint32_t newfd=fopen(filename,mode);
+	printVal(newfd);
+	filecontent="this is some content to be sent to the file with fd 1";
+	fwrite(filecontent,fd);
+	newfd=fopen("test.c","r");
+	char content[50];
+	fread(content,5,newfd);
 
+
+
+
+
+/*
 	const char *p;
 
 	for (p = "Hello, world!\n"; *p; ++p)
@@ -96,8 +123,9 @@ void
 	numExits = getNumExits();
 	printVal(numExits);
 
-	fopen("filename","w");
+	// fopen("filename","w");
 
+*/
 
 
 	*(long *)0x400 = 42;
