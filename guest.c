@@ -75,6 +75,11 @@ static char* fread(char *ptr, uint32_t size, uint32_t fd)
 	return ptr;
 }
 
+static void fclose(uint32_t fd){
+		outb(0xF7,fd);
+
+}
+
 void
 	__attribute__((noreturn))
 	__attribute__((section(".start")))
@@ -91,15 +96,15 @@ void
 	filename = "asdfasfsafda";
 	mode="w";
 	uint32_t newfd=fopen(filename,mode);
-	printVal(newfd);
 	filecontent="this is some content to be sent to the file with fd 1";
-	fwrite(filecontent,fd);
-	newfd=fopen("test.c","r");
+	fwrite(filecontent,newfd);
+	fclose(newfd);
+	newfd=fopen("asdfasfsafda","r");
 	char content[50];
 	fread(content,5,newfd);
 
 
-
+ 
 
 
 /*

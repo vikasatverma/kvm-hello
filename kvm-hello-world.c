@@ -430,7 +430,17 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 
 
 
+ 
 
+			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF7)
+			{
+				char *p = (char *)vcpu->kvm_run;
+				printf("printVal() ==> %d\n\n", *(p + vcpu->kvm_run->io.data_offset));
+				int index=*(p + vcpu->kvm_run->io.data_offset);
+				fclose(FILEarray[index]);
+				fflush(stdout);
+				continue;
+			}
 
 
 
