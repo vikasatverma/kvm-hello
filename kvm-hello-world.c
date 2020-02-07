@@ -346,13 +346,6 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 				vm->mem[0x400] = curIndex;
 
 				curIndex++;
-				// printf("curindex after: %d\n",curIndex);
-
-				if (ioctl(vcpu->fd, KVM_RUN, 0) < 0)
-				{
-					perror("KVM_RUN");
-					exit(1);
-				}
 
 				fflush(stdout);
 				continue;
@@ -375,7 +368,7 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 
 				}
 				data[i]='\0';
-				printf("content: %s\n %s\n",content,data);
+				printf("content: %s\n",data);
 				fflush(stdout);
 
 				if (ioctl(vcpu->fd, KVM_RUN, 0) < 0)
@@ -389,7 +382,7 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 
 
 				FILE *fd=FILEarray[index];
-				printf("Index ==> %d\n fileno = %d\n", index,fileno(fd));
+				// printf("Index ==> %d\nfileno = %d\n", index,fileno(fd));
 				fflush(stdout);
 
 				// fprintf(fd,"%s",content);
@@ -427,13 +420,13 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 				int index=*(p + vcpu->kvm_run->io.data_offset);
 
 				FILE *fd=FILEarray[index];
-				printf("Index ==> %d\n fileno = %d\n", index,fileno(fd));
+				// printf("Index ==> %d\nfileno = %d\n", index,fileno(fd));
 				fflush(stdout);
 
 				char data[500]="";
 
 				int sizeofdata = fread(data,1,size,fd);
-				printf("data: %s\nsize of data: %d\n",data,sizeofdata);
+				printf("data ==> \n%s\nsize of data ==> %d\n",data,sizeofdata);
 				vm->mem[0x400]=(int )(intptr_t)&data;
 
 				fflush(stdout);
@@ -442,9 +435,7 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 			}
 
 
-
- 
-
+//fclose()
 			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF7)
 			{
 				char *p = (char *)vcpu->kvm_run;
@@ -455,10 +446,48 @@ int run_vm(struct vm *vm, struct vcpu *vcpu, size_t sz)
 				continue;
 			}
 
+//fseek
+			if (vcpu->kvm_run->io.direction == KVM_EXIT_IO_OUT && vcpu->kvm_run->io.port == 0xF8)
+			{
+
+				char *p = (char *)vcpu->kvm_run;
+				unsigned int index=*(p + vcpu->kvm_run->io.data_offset);
+
+				// printf("\nsize ==> %d\n", *(p + vcpu->kvm_run->io.data_offset));
+				fflush(stdout);
+
+				if (ioctl(vcpu->fd, KVM_RUN, 0) < 0)
+				{
+					perror("KVM_RUN");
+					exit(1);
+				}
+
+				p = (char *)vcpu->kvm_run;
+				unsigned int offset=*(p + vcpu->kvm_run->io.data_offset);
+
+				// printf("\nsize ==> %d\n", *(p + vcpu->kvm_run->io.data_offset));
+				fflush(stdout);
+
+				if (ioctl(vcpu->fd, KVM_RUN, 0) < 0)
+				{
+					perror("KVM_RUN");
+					exit(1);
+				}				
+				
+				p = (char *)vcpu->kvm_run;
+				unsigned int whence=*(p + vcpu->kvm_run->io.data_offset);
+
+				// printf("\nsize ==> %d\n", *(p + vcpu->kvm_run->io.data_offset));
+				fflush(stdout);
 
 
+				FILE *fd = FILEarray[index];
 
+				printf("fseek() %u %u",offset,whence);
+				fseek(fd,offset,whence);
 
+				continue;
+			}
 
 
 

@@ -47,20 +47,18 @@ static void display(const char *str)
 	uint32_t stringPtr = (intptr_t)str;
 	outb(0xF3, stringPtr);
 }
-
+ 
 
 static uint32_t fopen(char *filename, char* mode){
-		outb(0xF4,(intptr_t)filename);
-		outb(0xF4,(intptr_t)mode);
-		uint32_t fd ;
-		fd = *(long *)0x400;
-		outb(0xF1,fd);
-		return fd;
+	outb(0xF4,(intptr_t)filename);
+	outb(0xF4,(intptr_t)mode);
+	uint32_t fd = *(long *)0x400;
+	return fd;
 }
 
 static void fwrite(char *data, uint32_t fd){
-		outb(0xF5,(intptr_t)data);
-		outb(0xF5,fd);
+	outb(0xF5,(intptr_t)data);
+	outb(0xF5,fd);
 }
 
 static char* fread(char *ptr, uint32_t size, uint32_t fd)
@@ -72,7 +70,13 @@ static char* fread(char *ptr, uint32_t size, uint32_t fd)
 }
 
 static void fclose(uint32_t fd){
-		outb(0xF7,fd);
+	outb(0xF7,fd);
+}
+
+static void fseek(uint32_t fd, uint32_t offset, uint32_t whence){
+	outb(0xF8,fd);
+	outb(0xF8,offset);
+	outb(0xF8,whence);
 
 }
 
@@ -82,50 +86,42 @@ void
 	_start(void)
 {
 
+//Part 1
+		printVal((uint32_t)30);
+		// 1 Exit.......... Total exits: 15
 
-	printVal((uint32_t)30);
-	// 1 Exit.......... Total exits: 15
+		uint32_t numExits = getNumExits();
+		printVal(numExits);
+		//2 Exits ie one to ask for count and one to print the count...Total exits: 18
 
-	uint32_t numExits = getNumExits();
-	printVal(numExits);
-	//2 Exits ie one to ask for count and one to print the count...Total exits: 18
+		// const char *str = "This is a random string";
+		display("This is a string");
+		//1 exit
 
-	const char *str = "This is a random string";
-	display(str);
-	//1 exit
+		numExits = getNumExits();
+		printVal(numExits);
 
-	numExits = getNumExits();
-	printVal(numExits);
+//Part 2
 
-	// fopen("filename","w");
+		uint32_t fd1=fopen("file_1.txt","w");
 
- 
-
-	char *filename="file_1.txt";
-	char *mode="w";
-
-	uint32_t fd=fopen(filename,mode);
-	char *filecontent="content for file 1";
-
-	fwrite(filecontent,fd);
+		fwrite("This is some randomcontent for file 1",fd1);
 
 
+//Part 3
 
-	filename = "file_2.txt";
-	mode="w";
+		char buffer[1000];
+		uint32_t fd2;
 
-	uint32_t newfd=fopen(filename,mode);
-	filecontent="content for file 2";
 
-	fclose(fd);
+		fd2 = fopen("kvm-hello-world.c","r");
+		fseek(fd2,50,0);
+		fread(buffer,100,fd2);
 
-	fwrite(filecontent,newfd);
-	fclose(newfd);
 
-	newfd=fopen("file_2.txt","r");
+		fclose(fd1);
+		fclose(fd2);
 
-	char content[50];
-	fread(content,5,newfd);
 
 
 
