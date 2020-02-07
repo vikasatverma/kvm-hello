@@ -56,16 +56,12 @@ static uint32_t fopen(char *filename, char* mode){
 		fd = *(long *)0x400;
 		outb(0xF1,fd);
 		return fd;
-		
 }
 
 static void fwrite(char *data, uint32_t fd){
 		outb(0xF5,(intptr_t)data);
 		outb(0xF5,fd);
-
 }
-
-
 
 static char* fread(char *ptr, uint32_t size, uint32_t fd)
 {
@@ -87,33 +83,6 @@ void
 {
 
 
-	char *filename="writefile.txt";
-	char *mode="w";
-	uint32_t fd=0;
-	fd=fopen(filename,mode);
-	char *filecontent="this is some content to be sent to the file with fd 0";
-	fwrite(filecontent,fd);
-	filename = "asdfasfsafda";
-	mode="w";
-	uint32_t newfd=fopen(filename,mode);
-	filecontent="this is some content to be sent to the file with fd 1";
-	fwrite(filecontent,newfd);
-	fclose(newfd);
-	newfd=fopen("asdfasfsafda","r");
-	char content[50];
-	fread(content,5,newfd);
-
-
- 
-
-
-/*
-	const char *p;
-
-	for (p = "Hello, world!\n"; *p; ++p)
-		outb(0xE9, *p);
-	// 14 Exits
-
 	printVal((uint32_t)30);
 	// 1 Exit.......... Total exits: 15
 
@@ -130,7 +99,36 @@ void
 
 	// fopen("filename","w");
 
-*/
+ 
+
+	char *filename="file_1.txt";
+	char *mode="w";
+
+	uint32_t fd=fopen(filename,mode);
+	char *filecontent="content for file 1";
+
+	fwrite(filecontent,fd);
+
+
+
+	filename = "file_2.txt";
+	mode="w";
+
+	uint32_t newfd=fopen(filename,mode);
+	filecontent="content for file 2";
+
+	fclose(fd);
+
+	fwrite(filecontent,newfd);
+	fclose(newfd);
+
+	newfd=fopen("file_2.txt","r");
+
+	char content[50];
+	fread(content,5,newfd);
+
+
+
 
 
 	*(long *)0x400 = 42;
