@@ -877,7 +877,7 @@ int main(int argc, char **argv)
 
 	// printf("initiating vm with memory %d Mbytes\n",0x200000/1024/1024*getpagesize()/1024);
 
-	vm_init(&vm, 0x40000000);
+	vm_init(&vm, 0x200000);
 	vcpu_init(&vm, &vcpu);
 
 	switch (mode)
