@@ -95,7 +95,7 @@ void
 		//2 Exits ie one to ask for count and one to print the count...Total exits: 18
 
 		// const char *str = "This is a random string";
-		display("This is a string");
+		display("This is a random string");
 		//1 exit
 
 		numExits = getNumExits();
@@ -105,12 +105,12 @@ void
 
 		uint32_t fd1=fopen("file_1.txt","w");
 
-		fwrite("This is some randomcontent for file 1",fd1);
+		fwrite("This course covers basic and advanced concepts related to the virtualization and how it enables the latest revolution of cloud computing. You will understand the various virtualization paradigms of full virtualization, para virtualization, and hardware-assisted virtualization, for CPU, memory, and I/O. You will also learn about containers and related concepts. The later part of the course will cover various advanced topics related to virtual machine migration, provisioning, nested virtualization, security, unikernels, and so on. The programming assignments in the course are designed to reinforce the concepts learnt in class.",fd1);
 
 
 //Part 3
 
-		char buffer[1000];
+		char buffer[100];
 		uint32_t fd2;
 
 
