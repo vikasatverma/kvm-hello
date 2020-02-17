@@ -47,7 +47,7 @@ static void display(const char *str)
 	uint32_t stringPtr = (intptr_t)str;
 	outb(0xF3, stringPtr);
 }
- 
+  
 
 static uint32_t fopen(char *filename, char* mode){
 	outb(0xF4,(intptr_t)filename);
